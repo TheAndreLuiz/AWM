@@ -1,8 +1,8 @@
 .POSIX:
 CC = g++
-PKG_CONFIG = `pkg-config xcb xcb-keysyms xcb-image gtkmm-4.0 --cflags --libs`
+PKG_CONFIG = `pkg-config xcb xcb-icccm xcb-keysyms xcb-image gtkmm-4.0 --cflags --libs`
 ALL_WARNING = -Wall -Wextra -pedantic
-ALL_LDFLAGS = -lxcb -lxcb-keysyms -lxcb-image $(LDFLAGS)
+ALL_LDFLAGS = -lxcb -lxcb-keysyms -lxcb-image -lxcb-icccm $(LDFLAGS)
 ALL_CFLAGS = $(PKG_CONFIG) $(CPPFLAGS) $(CFLAGS) $(ALL_WARNING)
 PREFIX = /usr/local
 LDLIBS = -lm

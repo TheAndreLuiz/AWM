@@ -1,8 +1,10 @@
 #include "xwm.h"
+#include <fstream>
 #include <iostream>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <xcb/xcb_icccm.h>
 #include <xcb/xcb_keysyms.h>
 
 const static bool running = true;
@@ -123,10 +125,10 @@ static void handleMotionNotify() {
         xcb_get_geometry_reply(connection, geom_now, NULL);
     uint16_t geom_x = geom->width;
     uint16_t geom_y = geom->height;
-    masks[0] = ((poin->root_x + geom_x) > screen->width_in_pixels)
+    masks[0] = ((poin->root_x + geom_x / 2) > screen->width_in_pixels)
                    ? (screen->width_in_pixels - geom_x)
                    : poin->root_x - geom_x / 2;
-    masks[1] = ((poin->root_y + geom_y) > screen->height_in_pixels)
+    masks[1] = ((poin->root_y + geom_y / 2) > screen->height_in_pixels)
                    ? (screen->height_in_pixels - geom_y)
                    : poin->root_y - geom_y / 2;
     xcb_configure_window(connection, win,
@@ -183,6 +185,7 @@ static void handleDestroyNotify() {
 
 static void handleFocusIn() {
   xcb_focus_in_event_t *e = (xcb_focus_in_event_t *)event;
+  setFocus(e->event);
 }
 
 static void handleFocusOut() {
@@ -191,13 +194,24 @@ static void handleFocusOut() {
 
 static void handleMapRequest() {
   xcb_map_request_event_t *e = (xcb_map_request_event_t *)event;
+
+  xcb_atom_t atom = XCB_CONFIG_WINDOW_WIDTH;
+  xcb_get_property_cookie_t test =
+      xcb_icccm_get_text_property(connection, e->window, atom);
+  xcb_flush(connection);
+
   xcb_map_window(connection, e->window);
+
+  std::ofstream log("/home/a/log", std::ios_base::app | std::ios_base::out);
+  log << test.sequence << "\n";
+
   uint32_t vals[5];
   vals[0] = (screen->width_in_pixels / 2) - (100 / 2);
   vals[1] = (screen->height_in_pixels / 2) - (100 / 2);
   vals[2] = 100;
   vals[3] = 100;
   vals[4] = 10;
+
   xcb_configure_window(connection, e->window,
                        XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y |
                            XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT |
@@ -227,43 +241,33 @@ static void handleButtonPress() {
 void handleEvent() {
   switch (event->response_type) {
   case XCB_MOTION_NOTIFY:
-    printf("handling motion notify\n");
     handleMotionNotify();
     break;
   case XCB_ENTER_NOTIFY:
-    printf("handling enter notify\n");
     handleEnterNotify();
     break;
   case XCB_DESTROY_NOTIFY:
-    printf("handling destroy notify\n");
     handleDestroyNotify();
     break;
   case XCB_BUTTON_PRESS:
-    printf("handling button press\n");
     handleButtonPress();
     break;
   case XCB_BUTTON_RELEASE:
-    printf("handling button release\n");
     handleButtonRelease();
     break;
   case XCB_KEY_PRESS:
-    printf("handling key press\n");
     handleKeyPress();
     break;
   case XCB_MAP_REQUEST:
-    printf("handling map request\n");
     handleMapRequest();
     break;
   case XCB_FOCUS_IN:
-    printf("handling focus in\n");
     handleFocusIn();
     break;
   case XCB_FOCUS_OUT:
-    printf("handling focus out\n");
     handleFocusOut();
     break;
   case XCB_NONE:
-    printf("none\n");
     break;
   }
 }
@@ -300,9 +304,7 @@ int main(int argc, char *argv[]) {
                  screen->height_in_pixels);
   xcb_free_pixmap(connection, pixmap);
 
-  printf("setup starting\n");
   setup(connection);
-  printf("setup done\n");
 
   while (running) {
     event = xcb_wait_for_event(connection);
