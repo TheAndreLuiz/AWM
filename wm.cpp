@@ -12,7 +12,7 @@ xcb_connection_t *connection;
 xcb_screen_t *screen;
 xcb_generic_event_t *event;
 
-static char *termcmd[] = {"alacritty", NULL};
+static char *termcmd[] = {"konsole", NULL};
 static char *menucmd[] = {"rofi", "-show drun"};
 
 static xcb_drawable_t win;
@@ -185,7 +185,9 @@ static void handleDestroyNotify() {
 
 static void handleFocusIn() {
   xcb_focus_in_event_t *e = (xcb_focus_in_event_t *)event;
-  setFocus(e->event);
+  masks[0] = XCB_STACK_MODE_ABOVE;
+  xcb_configure_window(connection, e->event, XCB_CONFIG_WINDOW_STACK_MODE, masks);
+  xcb_flush(connection);
 }
 
 static void handleFocusOut() {
@@ -195,22 +197,19 @@ static void handleFocusOut() {
 static void handleMapRequest() {
   xcb_map_request_event_t *e = (xcb_map_request_event_t *)event;
 
-  xcb_atom_t atom = XCB_CONFIG_WINDOW_WIDTH;
-  xcb_get_property_cookie_t test =
-      xcb_icccm_get_text_property(connection, e->window, atom);
-  xcb_flush(connection);
+  xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, e->window);
+  xcb_get_geometry_reply_t *reply =
+      xcb_get_geometry_reply(connection, cookie, NULL);
+  free(reply);
 
   xcb_map_window(connection, e->window);
 
-  std::ofstream log("/home/a/log", std::ios_base::app | std::ios_base::out);
-  log << test.sequence << "\n";
-
   uint32_t vals[5];
-  vals[0] = (screen->width_in_pixels / 2) - (100 / 2);
-  vals[1] = (screen->height_in_pixels / 2) - (100 / 2);
-  vals[2] = 100;
-  vals[3] = 100;
-  vals[4] = 10;
+  vals[0] = (screen->width_in_pixels / 2) - (reply->width / 2);
+  vals[1] = (screen->height_in_pixels / 2) - (reply->height / 2);
+  vals[2] = reply->width;
+  vals[3] = reply->height;
+  vals[4] = 0;
 
   xcb_configure_window(connection, e->window,
                        XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y |
