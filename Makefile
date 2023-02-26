@@ -1,9 +1,8 @@
 .POSIX:
 CC = g++
-PKG_CONFIG = `pkg-config xcb xcb-icccm xcb-keysyms xcb-image gtkmm-4.0 --cflags --libs`
+PKG_CONFIG = `pkg-config --cflags --libs xcb xcb-icccm xcb-keysyms xcb-image gtkmm-4.0 glib-2.0`
 ALL_WARNING = -Wall -Wextra -pedantic
-ALL_LDFLAGS = -lxcb -lxcb-keysyms -lxcb-image -lxcb-icccm $(LDFLAGS)
-ALL_CFLAGS = $(PKG_CONFIG) $(CPPFLAGS) $(CFLAGS) $(ALL_WARNING)
+ALL = $(PKG_CONFIG) $(ALL_WARNING)
 PREFIX = /usr/local
 LDLIBS = -lm
 BINDIR = $(PREFIX)/bin
@@ -17,9 +16,8 @@ install: all
 	cp -f wm.1 $(DESTDIR)$(MANDIR)/man1
 	chmod 755 $(DESTDIR)$(BINDIR)/wm
 	chmod 644 $(DESTDIR)$(MANDIR)/man1/wm.1
-wm: wm.o
-	$(CC) $(ALL_LDFLAGS) -o wm wm.o $(LDLIBS)
-wm.o: wm.cpp
+wm: wm.cpp
+	$(CC) $(ALL) *.cpp -o wm
 clean:
 	rm -f wm *.o
 uninstall:

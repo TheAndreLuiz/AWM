@@ -3,16 +3,22 @@
 #include <iostream>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
+#include <xcb/xcb_atom.h>
 #include <xcb/xcb_icccm.h>
 #include <xcb/xcb_keysyms.h>
 
-const static bool running = true;
+#include <gtkmm-4.0/gtkmm.h>
+
+#include <gdk/x11/gdkx.h>
+
+bool running = true;
 xcb_connection_t *connection;
 xcb_screen_t *screen;
 xcb_generic_event_t *event;
 
-static char *termcmd[] = {"konsole", NULL};
+static char *termcmd[] = {"alacritty", NULL};
 static char *menucmd[] = {"rofi", "-show drun"};
 
 static xcb_drawable_t win;
@@ -48,6 +54,48 @@ uint32_t masks[3];
 #define enterKey 0xff0d
 
 static void closewm() { xcb_disconnect(connection); }
+
+static void print_hello(GtkWidget *widget, gpointer data) {
+  printf("Hello World\n");
+}
+
+static void create_widgets(GtkApplication *app) {
+  GtkWidget *window = gtk_application_window_new(app);
+
+  gtk_window_set_title(GTK_WINDOW(window), "Window");
+  GtkWidget *grid = gtk_grid_new();
+  gtk_window_set_child(GTK_WINDOW(window), grid);
+
+  GtkWidget *button1 = gtk_button_new_with_label("Button 1");
+  g_signal_connect(button1, "clicked", G_CALLBACK(print_hello), NULL);
+  gtk_grid_attach(GTK_GRID(grid), button1, 0, 0, 1, 1);
+  // gtk_grid_attach(GtkGrid*, GtkWidget*, left, top, width, height);
+
+  GtkWidget *button2 = gtk_button_new_with_label("Button 2");
+  g_signal_connect(button2, "clicked", G_CALLBACK(print_hello), NULL);
+  gtk_grid_attach(GTK_GRID(grid), button2, 1, 0, 1, 1);
+
+  GtkWidget *button3 = gtk_button_new_with_label("Quit");
+  g_signal_connect_swapped(button3, "clicked", G_CALLBACK(gtk_window_destroy),
+                           window);
+  gtk_grid_attach(GTK_GRID(grid), button3, 0, 1, 2, 1);
+
+  GtkWidget *label = gtk_label_new("\nHello World\n");
+  gtk_label_set_selectable(GTK_LABEL(label), TRUE);
+  gtk_grid_attach(GTK_GRID(grid), label, 0, 2, 2, 1);
+
+  GdkDisplay *display = gdk_display_get_default();
+  GtkCssProvider *provider = gtk_css_provider_new();
+  gtk_css_provider_load_from_path(provider, "/home/a/Desktop/AWM/style.css");
+  gtk_style_context_add_provider_for_display(
+      display, GTK_STYLE_PROVIDER(provider),
+      GTK_STYLE_PROVIDER_PRIORITY_FALLBACK);
+  g_object_unref(provider);
+
+  gtk_widget_show(window);
+  std::cout << "GTK DONE"
+            << "\n";
+}
 
 static void spawn(char **com) {
   if (fork() == 0) {
@@ -87,7 +135,17 @@ static xcb_keysym_t xcb_get_keysym(xcb_connection_t *connection,
   return keysym;
 }
 
-void setup(xcb_connection_t *connection) {
+int setup() {
+  connection = xcb_connect(NULL, NULL);
+
+  int connectionResult = xcb_connection_has_error(connection);
+  if (connectionResult > 0) {
+    std::cout << "xcb_connection_has_error\n";
+    return connectionResult;
+  }
+
+  screen = xcb_setup_roots_iterator(xcb_get_setup(connection)).data;
+
   masks[0] =
       XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_STRUCTURE_NOTIFY |
       XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY | XCB_EVENT_MASK_PROPERTY_CHANGE;
@@ -112,6 +170,8 @@ void setup(xcb_connection_t *connection) {
                   XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, screen->root,
                   XCB_NONE, 3, XCB_MOD_MASK_4);
   xcb_flush(connection);
+
+  return connectionResult;
 }
 
 static void handleMotionNotify() {
@@ -157,18 +217,6 @@ static void setFocus(xcb_drawable_t window) {
   }
 }
 
-static void handleKeyPress() {
-  xcb_key_press_event_t *e = (xcb_key_press_event_t *)event;
-  xcb_keysym_t keysym = xcb_get_keysym(connection, e->detail);
-  win = e->child;
-  int key_table_size = sizeof(hotkeys) / sizeof(*hotkeys);
-  for (int i = 0; i < key_table_size; ++i) {
-    if ((hotkeys[i].keysym == keysym) && (hotkeys[i].mod == e->state)) {
-      hotkeys[i].func(hotkeys[i].com);
-    }
-  }
-}
-
 static void handleEnterNotify() {
   xcb_enter_notify_event_t *e = (xcb_enter_notify_event_t *)event;
   setFocus(e->event);
@@ -186,7 +234,8 @@ static void handleDestroyNotify() {
 static void handleFocusIn() {
   xcb_focus_in_event_t *e = (xcb_focus_in_event_t *)event;
   masks[0] = XCB_STACK_MODE_ABOVE;
-  xcb_configure_window(connection, e->event, XCB_CONFIG_WINDOW_STACK_MODE, masks);
+  xcb_configure_window(connection, e->event, XCB_CONFIG_WINDOW_STACK_MODE,
+                       masks);
   xcb_flush(connection);
 }
 
@@ -237,8 +286,50 @@ static void handleButtonPress() {
   xcb_flush(connection);
 }
 
+static void handleKeyPress() {
+  xcb_key_press_event_t *e = (xcb_key_press_event_t *)event;
+  xcb_keysym_t keysym = xcb_get_keysym(connection, e->detail);
+  win = e->child;
+  int key_table_size = sizeof(hotkeys) / sizeof(*hotkeys);
+  for (int i = 0; i < key_table_size; ++i) {
+    if ((hotkeys[i].keysym == keysym) && (hotkeys[i].mod == e->state)) {
+      hotkeys[i].func(hotkeys[i].com);
+    }
+  }
+}
+
+static void handleCreateNotify() {
+  xcb_create_notify_event_t *e = (xcb_create_notify_event_t *)event;
+  xcb_map_window(connection, e->parent);
+  std::cout << "width: " << e->width << "\n";
+  xcb_flush(connection);
+}
+
+static void handleConfigureRequest() {
+  xcb_configure_request_event_t *e = (xcb_configure_request_event_t *)event;
+  xcb_map_window(connection, e->window);
+  xcb_flush(connection);
+}
+
+static void handleConfigureNotify() {
+  xcb_configure_notify_event_t *e = (xcb_configure_notify_event_t *)event;
+  xcb_map_window(connection, e->window);
+  xcb_flush(connection);
+}
+
 void handleEvent() {
   switch (event->response_type) {
+  case XCB_CONFIGURE_NOTIFY:
+    handleConfigureNotify();
+    break;
+  case XCB_CONFIGURE_REQUEST:
+    handleConfigureRequest();
+    break;
+  case XCB_CREATE_NOTIFY:
+    handleCreateNotify();
+    break;
+  case XCB_EXPOSE:
+    break;
   case XCB_MOTION_NOTIFY:
     handleMotionNotify();
     break;
@@ -267,21 +358,63 @@ void handleEvent() {
     handleFocusOut();
     break;
   case XCB_NONE:
+  default:
+    printf("%i\n", event->response_type);
     break;
   }
 }
 
-int main(int argc, char *argv[]) {
-  connection = xcb_connect(NULL, NULL);
+static void on_map(GtkWidget *widget, gpointer args) {
+  GtkWindow *window = GTK_WINDOW(widget);
+  GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(widget));
+  GdkSurface *surface;
+  Window xframe;
+  unsigned long data[4];
 
-  int connectionResult = xcb_connection_has_error(connection);
-  if (connectionResult > 0) {
-    printf("xcb_connection_has_error\n");
-    return connectionResult;
+  surface = gtk_native_get_surface(GTK_NATIVE(window));
+  if (!surface)
+    return;
+
+  data[0] = 10;
+  data[1] = 10;
+  data[2] = 10;
+  data[3] = 10;
+
+  xframe = gdk_x11_surface_get_xid(surface);
+
+  gdk_x11_display_error_trap_push(display);
+
+  xcb_map_window(connection, xframe);
+  xcb_flush(connection);
+  std::cout << "teaakhakhk\n";
+}
+
+static void activate(GtkApplication *app, gpointer user_data) {
+  GtkWidget *window;
+  GtkWidget *button, *bbox;
+
+  window = gtk_application_window_new(app);
+  gtk_window_set_title(GTK_WINDOW(window), "mywindow");
+  gtk_window_set_default_size(GTK_WINDOW(window), 200, 200);
+
+  button = gtk_button_new_with_label("Hello World");
+
+  g_signal_connect(window, "map", G_CALLBACK(on_map), NULL);
+  g_signal_connect(button, "clicked", G_CALLBACK(print_hello), NULL);
+
+  gtk_widget_show(window);
+}
+
+void xcb_event_loop() {
+  GdkEvent *gdkEventTest;
+  while (running) {
+    event = xcb_wait_for_event(connection);
+    std::cout << "event " << event->response_type << "\n";
+    handleEvent();
   }
+}
 
-  screen = xcb_setup_roots_iterator(xcb_get_setup(connection)).data;
-
+void setWallpaper() {
   xcb_pixmap_t pixmap = xcb_generate_id(connection);
   xcb_create_pixmap(connection, screen->root_depth, pixmap, screen->root,
                     screen->width_in_pixels, screen->height_in_pixels);
@@ -292,7 +425,7 @@ int main(int argc, char *argv[]) {
   xcb_gcontext_t gc = xcb_generate_id(connection);
   xcb_create_gc(connection, gc, pixmap, 0, 0);
 
-  uint32_t values[1] = {screen->white_pixel};
+  uint32_t values[1] = {0xcccccc};
   xcb_change_gc(connection, gc, XCB_GC_FOREGROUND, values);
   xcb_poly_fill_rectangle(connection, pixmap, gc, 1, &rect);
 
@@ -302,13 +435,26 @@ int main(int argc, char *argv[]) {
   xcb_clear_area(connection, 0, screen->root, 0, 0, screen->width_in_pixels,
                  screen->height_in_pixels);
   xcb_free_pixmap(connection, pixmap);
+}
 
-  setup(connection);
+int main(int argc, char **argv) {
+  setup();
+  setWallpaper();
 
-  while (running) {
-    event = xcb_wait_for_event(connection);
-    handleEvent();
-  }
+  std::thread xcbThread(xcb_event_loop);
 
-  return connectionResult;
+  GdkDisplay *display = gdk_display_get_default();
+
+  GtkApplication *app;
+  app = gtk_application_new("org.gtk.example", G_APPLICATION_FLAGS_NONE);
+
+  g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
+
+  std::cout << "gtk running app\n";
+  g_application_run(G_APPLICATION(app), argc, argv);
+
+  std::cout << "app done\n";
+  g_object_unref(app);
+
+  return 0;
 }
