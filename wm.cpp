@@ -19,7 +19,9 @@ xcb_screen_t *screen;
 xcb_generic_event_t *event;
 
 static char *termcmd[] = {"alacritty", NULL};
-static char *menucmd[] = {"rofi", "-show drun"};
+static char *browser[] = {"vivaldi-stable", NULL};
+static char *fileManager[] = {"spacefm", NULL};
+static char *launcher[] = {"dmenu_run", NULL};
 
 static xcb_drawable_t win;
 uint32_t masks[3];
@@ -86,7 +88,7 @@ static void create_widgets(GtkApplication *app) {
 
   GdkDisplay *display = gdk_display_get_default();
   GtkCssProvider *provider = gtk_css_provider_new();
-  gtk_css_provider_load_from_path(provider, "/home/a/Desktop/AWM/style.css");
+  gtk_css_provider_load_from_path(provider, "/home/a/awm/style.css");
   gtk_style_context_add_provider_for_display(
       display, GTK_STYLE_PROVIDER(provider),
       GTK_STYLE_PROVIDER_PRIORITY_FALLBACK);
@@ -111,10 +113,23 @@ static void spawn(char **com) {
 
 void killclient(char **com) { xcb_kill_client(connection, win); }
 
+void updateCssTest(char **com) {
+  GdkDisplay *display = gdk_display_get_default();
+  GtkCssProvider *provider = gtk_css_provider_new();
+  gtk_css_provider_load_from_path(provider, "/home/a/awm/style.css");
+  gtk_style_context_add_provider_for_display(
+      display, GTK_STYLE_PROVIDER(provider),
+      GTK_STYLE_PROVIDER_PRIORITY_FALLBACK);
+  g_object_unref(provider);
+}
+
 void closewm(xcb_connection_t *connection) { xcb_disconnect(connection); }
 
 static Key hotkeys[] = {{XCB_MOD_MASK_4, enterKey, spawn, termcmd},
-                        {XCB_MOD_MASK_4, spaceKey, spawn, menucmd},
+                        {XCB_MOD_MASK_4, bKey, spawn, browser},
+                        {XCB_MOD_MASK_4, fKey, spawn, fileManager},
+                        {XCB_MOD_MASK_4, lKey, spawn, launcher},
+                        {XCB_MOD_MASK_4, uKey, updateCssTest, NULL},
                         {XCB_MOD_MASK_4, qKey, killclient, NULL}};
 
 static xcb_keycode_t *xcb_get_keycodes(xcb_connection_t *connection,
@@ -146,9 +161,9 @@ int setup() {
 
   screen = xcb_setup_roots_iterator(xcb_get_setup(connection)).data;
 
-  masks[0] =
-      XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_STRUCTURE_NOTIFY |
-      XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY | XCB_EVENT_MASK_PROPERTY_CHANGE;
+  masks[0] = XCB_EVENT_MASK_STRUCTURE_NOTIFY |
+             XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY |
+             XCB_EVENT_MASK_PROPERTY_CHANGE;
   xcb_change_window_attributes_checked(connection, screen->root,
                                        XCB_CW_EVENT_MASK, masks);
   xcb_ungrab_key(connection, XCB_GRAB_ANY, screen->root, XCB_MOD_MASK_ANY);
@@ -211,15 +226,21 @@ static void handleMotionNotify() {
 }
 
 static void setFocus(xcb_drawable_t window) {
-  if ((window != 0) && (window != screen->root)) {
+  if ((window != 0)) {
     xcb_set_input_focus(connection, XCB_INPUT_FOCUS_POINTER_ROOT, window,
                         XCB_CURRENT_TIME);
+    xcb_flush(connection);
   }
 }
 
 static void handleEnterNotify() {
   xcb_enter_notify_event_t *e = (xcb_enter_notify_event_t *)event;
   setFocus(e->event);
+}
+
+static void handleLeaveNotify() {
+  xcb_leave_notify_event_t *e = (xcb_leave_notify_event_t *)event;
+  setFocus(screen->root);
 }
 
 static void handleButtonRelease() {
@@ -283,6 +304,7 @@ static void handleButtonPress() {
   masks[0] = XCB_STACK_MODE_ABOVE;
   xcb_configure_window(connection, win, XCB_CONFIG_WINDOW_STACK_MODE, masks);
   masks[2] = ((1 == e->detail) ? 1 : ((win != 0) ? 3 : 0));
+  setFocus(win);
   xcb_flush(connection);
 }
 
@@ -336,6 +358,9 @@ void handleEvent() {
   case XCB_ENTER_NOTIFY:
     handleEnterNotify();
     break;
+  case XCB_LEAVE_NOTIFY:
+    handleLeaveNotify();
+    break;
   case XCB_DESTROY_NOTIFY:
     handleDestroyNotify();
     break;
@@ -359,7 +384,9 @@ void handleEvent() {
     break;
   case XCB_NONE:
   default:
-    printf("%i\n", event->response_type);
+    std::fstream out("/home/a/log");
+    out << event->full_sequence << "\n";
+    out.close();
     break;
   }
 }
@@ -386,30 +413,16 @@ static void on_map(GtkWidget *widget, gpointer args) {
 
   xcb_map_window(connection, xframe);
   xcb_flush(connection);
-  std::cout << "teaakhakhk\n";
 }
 
 static void activate(GtkApplication *app, gpointer user_data) {
-  GtkWidget *window;
-  GtkWidget *button, *bbox;
-
-  window = gtk_application_window_new(app);
-  gtk_window_set_title(GTK_WINDOW(window), "mywindow");
-  gtk_window_set_default_size(GTK_WINDOW(window), 200, 200);
-
-  button = gtk_button_new_with_label("Hello World");
-
-  g_signal_connect(window, "map", G_CALLBACK(on_map), NULL);
-  g_signal_connect(button, "clicked", G_CALLBACK(print_hello), NULL);
-
-  gtk_widget_show(window);
+  create_widgets(app);
 }
 
 void xcb_event_loop() {
   GdkEvent *gdkEventTest;
   while (running) {
     event = xcb_wait_for_event(connection);
-    std::cout << "event " << event->response_type << "\n";
     handleEvent();
   }
 }
@@ -446,15 +459,16 @@ int main(int argc, char **argv) {
   GdkDisplay *display = gdk_display_get_default();
 
   GtkApplication *app;
-  app = gtk_application_new("org.gtk.example", G_APPLICATION_FLAGS_NONE);
+  app = gtk_application_new("org.gtk.example", G_APPLICATION_DEFAULT_FLAGS);
 
   g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
 
   std::cout << "gtk running app\n";
   g_application_run(G_APPLICATION(app), argc, argv);
-
   std::cout << "app done\n";
   g_object_unref(app);
 
   return 0;
 }
+
+// event viewer app
