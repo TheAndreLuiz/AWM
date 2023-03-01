@@ -1,6 +1,7 @@
-#include "xwm.h"
+#include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <thread>
@@ -13,52 +14,70 @@
 
 #include <gdk/x11/gdkx.h>
 
+int linesTest = 0; // change
+
 bool running = true;
 xcb_connection_t *connection;
 xcb_screen_t *screen;
 xcb_generic_event_t *event;
 
-static char *termcmd[] = {"alacritty", NULL};
-static char *browser[] = {"vivaldi-stable", NULL};
-static char *fileManager[] = {"spacefm", NULL};
-static char *launcher[] = {"dmenu_run", NULL};
-
 static xcb_drawable_t win;
 uint32_t masks[3];
 
-#define aKey 0x0061
-#define bKey 0x0062
-#define cKey 0x0063
-#define dKey 0x0064
-#define eKey 0x0065
-#define fKey 0x0066
-#define gKey 0x0067
-#define hKey 0x0068
-#define iKey 0x0069
-#define jKey 0x006a
-#define kKey 0x006b
-#define lKey 0x006c
-#define mKey 0x006d
-#define nKey 0x006e
-#define oKey 0x006f
-#define pKey 0x0070
-#define qKey 0x0071
-#define rKey 0x0072
-#define sKey 0x0073
-#define tKey 0x0074
-#define uKey 0x0075
-#define vKey 0x0076
-#define wKey 0x0077
-#define xKey 0x0078
-#define yKey 0x0079
-#define zKey 0x007a
-#define spaceKey 0x0020
-#define enterKey 0xff0d
+struct KeyToFunction {
+  xcb_keysym_t key;
+  void (*spawnFunctionPointer)(char *, char **);
+};
+
+KeyToFunction *hotkeys;
 
 static void closewm() { xcb_disconnect(connection); }
 
-static void print_hello(GtkWidget *widget, gpointer data) {
+static void spawn(char *program, char **arguments) {
+  if (fork() == 0) {
+    setsid();
+    if (fork() != 0) {
+      _exit(0);
+    }
+    execvp(program, arguments);
+    _exit(0);
+  }
+  wait(NULL);
+}
+
+static void closeTest(GtkWidget *widget, gpointer data) {
   printf("Hello World\n");
+}
+
+static void spawnTest(GtkWidget *widget, GtkWidget *data) {
+  GtkEntryBuffer *entryBuffer1 = gtk_entry_get_buffer((GtkEntry *)data);
+  std::string temp = (char *)gtk_entry_buffer_get_text(entryBuffer1);
+
+  std::string program = temp.substr(0, temp.find(" "));
+  std::string argumentsString = temp.substr(temp.find(" "), temp.length());
+
+  char *arguments[std::count(argumentsString.begin(), argumentsString.end(),
+                             ' ')]; // change and change everything
+
+  std::cout << program << std::endl;
+
+  int pos = 0;
+  int i = 0;
+  std::string delimiter = " ";
+  while ((pos = argumentsString.find(delimiter)) != std::string::npos) {
+    arguments[i++] = (char *)argumentsString.substr(0, pos).data();
+    argumentsString.erase(0, pos + delimiter.length());
+  }
+  arguments[i] = (char *)argumentsString.data();
+
+  std::cout << "test\n";
+  for (int i = 0;
+       i < std::count(argumentsString.begin(), argumentsString.end(), ' ');
+       i++) {
+    std::cout << arguments[i] << "\n";
+  }
+
+  spawn((char *)program.data(), arguments); // change
 }
 
 static void create_widgets(GtkApplication *app) {
@@ -68,23 +87,25 @@ static void create_widgets(GtkApplication *app) {
   GtkWidget *grid = gtk_grid_new();
   gtk_window_set_child(GTK_WINDOW(window), grid);
 
-  GtkWidget *button1 = gtk_button_new_with_label("Button 1");
-  g_signal_connect(button1, "clicked", G_CALLBACK(print_hello), NULL);
-  gtk_grid_attach(GTK_GRID(grid), button1, 0, 0, 1, 1);
-  // gtk_grid_attach(GtkGrid*, GtkWidget*, left, top, width, height);
+  GtkWidget *windowEntry1 = gtk_entry_new();
+  gtk_grid_attach(GTK_GRID(grid), windowEntry1, 0, 2, 2, 1);
 
-  GtkWidget *button2 = gtk_button_new_with_label("Button 2");
-  g_signal_connect(button2, "clicked", G_CALLBACK(print_hello), NULL);
+  GtkWidget *windowEntry2 = gtk_entry_new();
+  gtk_grid_attach(GTK_GRID(grid), windowEntry2, 0, 3, 3, 1);
+
+  GtkWidget *spawnWindowButton = gtk_button_new_with_label("Spawn window");
+  g_signal_connect(spawnWindowButton, "clicked", G_CALLBACK(spawnTest),
+                   windowEntry1);
+  gtk_grid_attach(GTK_GRID(grid), spawnWindowButton, 0, 0, 1, 1);
+
+  GtkWidget *button2 = gtk_button_new_with_label("Close window");
+  g_signal_connect(button2, "clicked", G_CALLBACK(closeTest), NULL);
   gtk_grid_attach(GTK_GRID(grid), button2, 1, 0, 1, 1);
 
   GtkWidget *button3 = gtk_button_new_with_label("Quit");
   g_signal_connect_swapped(button3, "clicked", G_CALLBACK(gtk_window_destroy),
                            window);
   gtk_grid_attach(GTK_GRID(grid), button3, 0, 1, 2, 1);
-
-  GtkWidget *label = gtk_label_new("\nHello World\n");
-  gtk_label_set_selectable(GTK_LABEL(label), TRUE);
-  gtk_grid_attach(GTK_GRID(grid), label, 0, 2, 2, 1);
 
   GdkDisplay *display = gdk_display_get_default();
   GtkCssProvider *provider = gtk_css_provider_new();
@@ -98,19 +119,6 @@ static void create_widgets(GtkApplication *app) {
   std::cout << "GTK DONE"
             << "\n";
 }
-
-static void spawn(char **com) {
-  if (fork() == 0) {
-    setsid();
-    if (fork() != 0) {
-      _exit(0);
-    }
-    execvp((char *)com[0], (char **)com);
-    _exit(0);
-  }
-  wait(NULL);
-}
-
 void killclient(char **com) { xcb_kill_client(connection, win); }
 
 void updateCssTest(char **com) {
@@ -124,13 +132,6 @@ void updateCssTest(char **com) {
 }
 
 void closewm(xcb_connection_t *connection) { xcb_disconnect(connection); }
-
-static Key hotkeys[] = {{XCB_MOD_MASK_4, enterKey, spawn, termcmd},
-                        {XCB_MOD_MASK_4, bKey, spawn, browser},
-                        {XCB_MOD_MASK_4, fKey, spawn, fileManager},
-                        {XCB_MOD_MASK_4, lKey, spawn, launcher},
-                        {XCB_MOD_MASK_4, uKey, updateCssTest, NULL},
-                        {XCB_MOD_MASK_4, qKey, killclient, NULL}};
 
 static xcb_keycode_t *xcb_get_keycodes(xcb_connection_t *connection,
                                        xcb_keysym_t keysym) {
@@ -150,6 +151,45 @@ static xcb_keysym_t xcb_get_keysym(xcb_connection_t *connection,
   return keysym;
 }
 
+void grabKeys() { // mudar tudo, apenas test
+  std::ifstream file("/home/a/Desktop/awm/hotkeys.conf");
+  if (file.is_open()) {
+    std::string line;
+    while (std::getline(file, line)) {
+      char *temp[std::count(line.begin(), line.end(),
+                            ' ')]; // change and change everything
+      int i = 1;
+      int pos = 0;
+      std::string delimiter = " ";
+      temp[0] = (char *)line.substr(0, line.find(delimiter)).data();
+      while ((pos = line.find(delimiter)) != std::string::npos) {
+        temp[i] = (char *)line.substr(0, pos).data();
+        line.erase(0, pos + delimiter.length());
+        std::cout << temp[i] << std::endl;
+        i++;
+      }
+      temp[i] = (char *)line.data();
+
+      std::cout << "1" << std::endl;
+
+      std::string key = temp[0];
+      std::string command = temp[1];
+
+      xcb_keysym_t keysym;
+      xcb_keycode_t *keycode = xcb_get_keycodes(connection, keysym);
+      xcb_grab_key(connection, 1, screen->root, XCB_MOD_MASK_4, *keycode,
+                   XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC);
+      hotkeys[linesTest].key = keysym;
+
+      std::cout << "2" << std::endl;
+      if (command == "runs") {
+        hotkeys[linesTest++].spawnFunctionPointer = &spawn;
+      }
+    }
+    file.close();
+  }
+}
+
 int setup() {
   connection = xcb_connect(NULL, NULL);
 
@@ -167,14 +207,9 @@ int setup() {
   xcb_change_window_attributes_checked(connection, screen->root,
                                        XCB_CW_EVENT_MASK, masks);
   xcb_ungrab_key(connection, XCB_GRAB_ANY, screen->root, XCB_MOD_MASK_ANY);
-  int key_table_size = sizeof(hotkeys) / sizeof(*hotkeys);
-  for (int i = 0; i < key_table_size; ++i) { // god, change pls
-    xcb_keycode_t *keycode = xcb_get_keycodes(connection, hotkeys[i].keysym);
-    if (keycode != NULL) {
-      xcb_grab_key(connection, 1, screen->root, hotkeys[i].mod, *keycode,
-                   XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC);
-    }
-  }
+
+  grabKeys();
+
   xcb_flush(connection);
   xcb_grab_button(connection, 0, screen->root,
                   XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE,
@@ -311,13 +346,7 @@ static void handleButtonPress() {
 static void handleKeyPress() {
   xcb_key_press_event_t *e = (xcb_key_press_event_t *)event;
   xcb_keysym_t keysym = xcb_get_keysym(connection, e->detail);
-  win = e->child;
-  int key_table_size = sizeof(hotkeys) / sizeof(*hotkeys);
-  for (int i = 0; i < key_table_size; ++i) {
-    if ((hotkeys[i].keysym == keysym) && (hotkeys[i].mod == e->state)) {
-      hotkeys[i].func(hotkeys[i].com);
-    }
-  }
+  hotkeys[0].spawnFunctionPointer("alacritty", NULL);
 }
 
 static void handleCreateNotify() {

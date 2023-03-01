@@ -8,19 +8,19 @@ LDLIBS = -lm
 BINDIR = $(PREFIX)/bin
 MANDIR = $(PREFIX)/share/man
 
-all: wm
+all: awm
 install: all
 	mkdir -p $(DESTDIR)$(BINDIR)
 	mkdir -p $(DESTDIR)$(MANDIR)/man1
-	cp -f wm $(DESTDIR)$(BINDIR)
-	cp -f wm.1 $(DESTDIR)$(MANDIR)/man1
-	chmod 755 $(DESTDIR)$(BINDIR)/wm
-	chmod 644 $(DESTDIR)$(MANDIR)/man1/wm.1
-wm: wm.cpp
-	$(CC) $(ALL) *.cpp -o wm
+	cp -f awm $(DESTDIR)$(BINDIR)
+	cp -f awm.1 $(DESTDIR)$(MANDIR)/man1
+	chmod 755 $(DESTDIR)$(BINDIR)/awm
+	chmod 644 $(DESTDIR)$(MANDIR)/man1/awm.1
+awm: awm.cpp
+	$(CC) $(ALL) *.cpp -o awm
 clean:
-	rm -f wm *.o
+	rm -f awm *.o
 uninstall:
-	rm -f $(DESTDIR)$(BINDIR)/wm
-	rm -f $(DESTDIR)$(MANDIR)/man1/wm.1
+	rm -f $(DESTDIR)$(BINDIR)/awm
+	rm -f $(DESTDIR)$(MANDIR)/man1/awm.1
 .PHONY: all install uninstall clean

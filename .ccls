@@ -1,3 +1,6 @@
+%h -x c++-header
+-Wall
+%cpp -std=c++20
 -I/usr/include/gtkmm-4.0
 -I/usr/lib/gtkmm-4.0/include
 -I/usr/include/giomm-2.68
