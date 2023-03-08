@@ -3,12 +3,8 @@
 
 class Hotkey {
 public:
-  Hotkey(xcb_keysym_t hotkey, void (*function)(const std::string &),
-         const std::string &argument);
-  // TODO wtf this
-  // Hotkey(xcb_keysym_t hotkey, void (*function)(const std::string &),
-  //        const std::string &argument)
-  //     : hotkey(hotkey), function(function), argument(argument) {}
+  Hotkey(xcb_keysym_t hotkey, void (*function)(const std::string *),
+         const std::string *argument);
 
   void(*getFunction());
 

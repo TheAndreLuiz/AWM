@@ -10,9 +10,9 @@ Hotkeys *Setup::setupHotkeys() {
   Hotkeys *hotkeys = new Hotkeys();
 
   const std::string test = "a";
-  Hotkey hotkeyEnter((xcb_keysym_t)0xff0d, (Spawn::spawn), (&test));
+  Hotkey hotkeyEnter((xcb_keysym_t)0xff0d, Spawn::spawn, &test);
 
-  hotkeys->addHotkey(hotkeyEnter);
+  hotkeys->addHotkey(&hotkeyEnter);
 
   return hotkeys;
 }

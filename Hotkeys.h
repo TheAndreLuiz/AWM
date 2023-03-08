@@ -6,7 +6,7 @@ class Hotkeys {
 public:
   ~Hotkeys();
 
-  void addHotkey(Hotkey hotkey);
+  void addHotkey(Hotkey *hotkey);
 
   void (*hotkeyToFunction(xcb_keysym_t))(const std::string *);
 

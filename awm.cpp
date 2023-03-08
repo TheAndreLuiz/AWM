@@ -54,27 +54,24 @@ static void spawnTest(GtkWidget *widget, GtkWidget *data) {
   std::string temp = (char *)gtk_entry_buffer_get_text(entryBuffer1);
 
   std::string program = temp.substr(0, temp.find(" "));
-  std::string argumentsString = temp.substr(temp.find(" "), temp.length());
+  std::string argumentsString = temp.substr(temp.find(" ") + 1, temp.length());
 
   char *arguments[std::count(argumentsString.begin(), argumentsString.end(),
                              ' ')]; // change and change everything
-
-  std::cout << program << std::endl;
-
-  int pos = 0;
   int i = 0;
   std::string delimiter = " ";
-  while ((pos = argumentsString.find(delimiter)) != std::string::npos) {
-    arguments[i++] = (char *)argumentsString.substr(0, pos).data();
-    argumentsString.erase(0, pos + delimiter.length());
+  int pos = argumentsString.find(delimiter);
+
+  while (pos != std::string::npos) {
+    arguments[i] = (char *)argumentsString.substr(0, pos).data();
+    argumentsString.erase(0, pos + 1);
+    pos = argumentsString.find(delimiter);
+    i++;
   }
   arguments[i] = (char *)argumentsString.data();
 
-  std::cout << "test\n";
-  for (int i = 0;
-       i < std::count(argumentsString.begin(), argumentsString.end(), ' ');
-       i++) {
-    std::cout << arguments[i] << "\n";
+  for (int i = 0; i < 2; i++) {
+    std::cout << arguments[i] << " <- \n";
   }
 
   spawn((char *)program.data(), arguments); // change
@@ -151,45 +148,6 @@ static xcb_keysym_t xcb_get_keysym(xcb_connection_t *connection,
   return keysym;
 }
 
-void grabKeys() { // mudar tudo, apenas test
-  std::ifstream file("/home/a/Desktop/awm/hotkeys.conf");
-  if (file.is_open()) {
-    std::string line;
-    while (std::getline(file, line)) {
-      char *temp[std::count(line.begin(), line.end(),
-                            ' ')]; // change and change everything
-      int i = 1;
-      int pos = 0;
-      std::string delimiter = " ";
-      temp[0] = (char *)line.substr(0, line.find(delimiter)).data();
-      while ((pos = line.find(delimiter)) != std::string::npos) {
-        temp[i] = (char *)line.substr(0, pos).data();
-        line.erase(0, pos + delimiter.length());
-        std::cout << temp[i] << std::endl;
-        i++;
-      }
-      temp[i] = (char *)line.data();
-
-      std::cout << "1" << std::endl;
-
-      std::string key = temp[0];
-      std::string command = temp[1];
-
-      xcb_keysym_t keysym;
-      xcb_keycode_t *keycode = xcb_get_keycodes(connection, keysym);
-      xcb_grab_key(connection, 1, screen->root, XCB_MOD_MASK_4, *keycode,
-                   XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC);
-      hotkeys[linesTest].key = keysym;
-
-      std::cout << "2" << std::endl;
-      if (command == "runs") {
-        hotkeys[linesTest++].spawnFunctionPointer = &spawn;
-      }
-    }
-    file.close();
-  }
-}
-
 int setup() {
   connection = xcb_connect(NULL, NULL);
 
@@ -207,8 +165,6 @@ int setup() {
   xcb_change_window_attributes_checked(connection, screen->root,
                                        XCB_CW_EVENT_MASK, masks);
   xcb_ungrab_key(connection, XCB_GRAB_ANY, screen->root, XCB_MOD_MASK_ANY);
-
-  grabKeys();
 
   xcb_flush(connection);
   xcb_grab_button(connection, 0, screen->root,
@@ -413,9 +369,6 @@ void handleEvent() {
     break;
   case XCB_NONE:
   default:
-    std::fstream out("/home/a/log");
-    out << event->full_sequence << "\n";
-    out.close();
     break;
   }
 }
@@ -499,5 +452,3 @@ int main(int argc, char **argv) {
 
   return 0;
 }
-
-// event viewer app
